@@ -11,14 +11,24 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<'doctor' | 'patient' | 'admin' | null>(null);
   const { login, switchRole } = useAuth();
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedRole) {
-      // For demo purposes, use the quick login
-      switchRole(selectedRole);
-    } else {
-      await login(email, password);
+    try {
+      setError(null);
+      if (selectedRole) {
+        // For admin/doctor the backend expects a username field; for patient it expects email
+        await login(email, password, selectedRole as any);
+      } else {
+        // default to patient/email login
+        await login(email, password);
+      }
+    } catch (err: any) {
+      // Show a friendly error message to the user
+      const msg = err?.message || 'Login failed';
+      setError(msg);
+      console.error('Login failed', err);
     }
   };
 
@@ -84,11 +94,13 @@ export function LoginForm() {
             <CardContent>
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">
+                    {selectedRole === 'admin' || selectedRole === 'doctor' ? 'Username' : 'Email'}
+                  </Label>
                   <Input
                     id="email"
-                    type="email"
-                    placeholder="Enter your email"
+                    type={selectedRole === 'admin' || selectedRole === 'doctor' ? 'text' : 'email'}
+                    placeholder={selectedRole === 'admin' || selectedRole === 'doctor' ? 'Enter your username' : 'Enter your email'}
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     required
@@ -119,6 +131,11 @@ export function LoginForm() {
                 <Button type="submit" className="w-full">
                   Login
                 </Button>
+                {error && (
+                  <div className="text-sm text-red-600 mt-2 text-center" role="alert">
+                    {error}
+                  </div>
+                )}
                 
                 <Button 
                   type="button" 

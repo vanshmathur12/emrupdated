@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { userSignIn, adminSignIn, doctorSignIn, storeSession, clearSession } from '@/lib/api/auth';
 
 export type UserRole = 'doctor' | 'patient' | 'admin' | 'hr' | 'nurse' | 'receptionist';
 
 export interface User {
   id: string;
-  name: string;
-  email: string;
+  name?: string;
+  username?: string;
+  email?: string;
   phone?: string;
   role: UserRole;
   avatar?: string;
@@ -15,87 +18,60 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string, phone?: string) => Promise<void>; // ✅ phone optional
+  login: (emailOrUsername: string, password: string, role?: UserRole) => Promise<void>;
   logout: () => void;
-  switchRole: (role: UserRole) => void;
+  switchRole: (role: UserRole) => void; // keep as demo helper
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Mock users for demo
-const mockUsers: Record<UserRole, User> = {
-  doctor: {
-    id: '1',
-    name: 'Dr. Sarah Johnson',
-    email: 'dr.johnson@hospital.com',
-    role: 'doctor',
-    permissions: ['patient_read', 'patient_write', 'prescription_write'],
-    department: 'Cardiology'
-  },
-  patient: {
-    id: '2',
-    name: 'John Smith',
-    email: 'john.smith@email.com',
-    role: 'patient',
-    permissions: ['own_records_read'],
-  },
-  admin: {
-    id: '3',
-    name: 'Admin User',
-    email: 'admin@hospital.com',
-    role: 'admin',
-    permissions: ['all'],
-    department: 'Administration'
-  },
-  hr: {
-    id: '4',
-    name: 'HR Manager',
-    email: 'hr@hospital.com',
-    role: 'hr',
-    permissions: ['staff_read', 'staff_write', 'role_manage'],
-    department: 'Human Resources'
-  },
-  nurse: {
-    id: '5',
-    name: 'Nurse Betty Wilson',
-    email: 'nurse.wilson@hospital.com',
-    role: 'nurse',
-    permissions: ['patient_read', 'appointment_manage'],
-    department: 'General Medicine'
-  },
-  receptionist: {
-    id: '6',
-    name: 'Reception Desk',
-    email: 'reception@hospital.com',
-    role: 'receptionist',
-    permissions: ['patient_read', 'appointment_manage', 'patient_search'],
-    department: 'Front Desk'
-  }
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const navigate = useNavigate();
 
-  const login = async (email: string, password: string, phone?: string) => {
-    // Mock login - in a real app this would be an API call
-    const role: UserRole = email.includes('dr.')
-      ? 'doctor'
-      : email.includes('admin')
-      ? 'admin'
-      : 'patient';
+  const login = async (emailOrUsername: string, password: string, role?: UserRole) => {
+    // Attempt real backend authentication based on role
+    try {
+      let res: any;
 
-    // Attach phone if provided
-    setUser({
-      ...mockUsers[role],
-      email,
-      phone: phone || undefined,
-    });
+      if (role === 'admin') {
+        // backend expects username for admin
+        res = await adminSignIn({ username: emailOrUsername, password });
+      } else if (role === 'doctor') {
+        res = await doctorSignIn({ username: emailOrUsername, password });
+      } else {
+        // default to user (patient) signin using email
+        res = await userSignIn({ email: emailOrUsername, password });
+      }
+
+      // Require an explicit success flag + access token from the backend
+      if (res && res.success && res.accessToken) {
+        storeSession(res as any);
+        setUser({ ...(res.user as User), role: (res.user?.role as UserRole) || (role || 'patient') });
+        
+        // Redirect to dashboard after successful login
+        navigate('/dashboard');
+      } else {
+        const message = res?.message || 'Invalid credentials';
+        throw new Error(message);
+      }
+    } catch (err) {
+      // Clear any partial session
+      clearSession();
+      setUser(null);
+      throw err;
+    }
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    clearSession();
+    setUser(null);
+  };
 
+  // keep a demo-only role switch helper (does not authenticate)
   const switchRole = (role: UserRole) => {
-    setUser(mockUsers[role]);
+    // minimal demo representation
+    setUser({ id: role, role, email: `${role}@demo`, name: `${role.charAt(0).toUpperCase() + role.slice(1)} (Demo)` });
   };
 
   return (

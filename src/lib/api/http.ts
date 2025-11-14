@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+// Default to backend port 5000 used by the included server (server.js)
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 
 export const http = axios.create({
   baseURL: BASE_URL,
@@ -12,7 +13,8 @@ export const http = axios.create({
 // Request interceptor to add auth token
 http.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
+    // The auth module stores tokens under 'accessToken' / 'refreshToken' / 'user'
+    const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -26,8 +28,11 @@ http.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
+      // Clear the session keys used by storeSession / auth
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      // Redirect to auth page
       window.location.href = '/auth';
     }
     return Promise.reject(error);
